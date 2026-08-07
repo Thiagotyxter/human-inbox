@@ -1,13 +1,27 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { asUuidOrNull, inferAuthorType, extractMediaKind, extractMessageType, extractTextFromPayload } from "@/lib/conversations/service";
+import {
+  asUuidOrNull,
+  inferAuthorType,
+  extractMediaCaption,
+  extractMediaAssetId,
+  extractMediaFilename,
+  extractMediaKind,
+  extractMediaMimeType,
+  extractMediaUrl,
+  extractMessageType,
+  extractTextFromPayload,
+  extractTranscriptFromPayload,
+} from "@/lib/conversations/service";
 import {
   getOrCreateConversation,
   recordProcessedWebhookEvent,
   updateMessageStatus,
+  updateMessageTranscription,
   upsertInboundMessage,
   upsertOutboundMessage,
 } from "@/lib/conversations/repository";
+import { getTyxterMessage } from "@/lib/tyxter/messages";
 import type { TyxterWebhookEnvelope } from "@/lib/tyxter/types";
 
 function asRecord(value: unknown) {
@@ -36,6 +50,34 @@ function normalizePhone(value: unknown) {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+function transcriptionValues(data: Record<string, unknown>) {
+  const transcription = asRecord(data.transcription) ?? data;
+  const rawStatus = transcription.status;
+  const status: "pending" | "succeeded" | "failed" = rawStatus === "succeeded" || rawStatus === "failed" ? rawStatus : "pending";
+  const transcript = normalizePhone(transcription.text) ?? normalizePhone(transcription.transcript);
+  const errorRecord = asRecord(transcription.error);
+  const error = normalizePhone(transcription.error) ?? normalizePhone(errorRecord?.message);
+  return { status, transcript, error };
+}
+
+async function enrichMinimalPayload(messageId: string, payload: Record<string, unknown> | null, metadata: Record<string, unknown> | null) {
+  const isMinimalMediaPayload = payload?.type === "media" && Object.keys(payload).length <= 1;
+
+  if (!isMinimalMediaPayload) {
+    return { payload, metadata };
+  }
+
+  try {
+    const detail = await getTyxterMessage(messageId);
+    return {
+      payload: asRecord(detail.payload) ?? payload,
+      metadata: asRecord(detail.metadata) ?? metadata,
+    };
+  } catch {
+    return { payload, metadata };
+  }
+}
+
 export async function processTyxterWebhook(client: SupabaseClient, envelope: TyxterWebhookEnvelope) {
   const event = getEnvelopeEvent(envelope);
 
@@ -52,7 +94,8 @@ export async function processTyxterWebhook(client: SupabaseClient, envelope: Tyx
   const metadata = asRecord(data.metadata);
   const sender = asRecord(data.sender);
   const recipient = asRecord(data.recipient);
-  const messageId = normalizePhone(data.message_id) ?? normalizePhone(data.id);
+  const message = asRecord(data.message);
+  const messageId = normalizePhone(data.message_id) ?? normalizePhone(data.id) ?? normalizePhone(message?.id);
 
   switch (event.eventType) {
     case "message.received": {
@@ -67,6 +110,8 @@ export async function processTyxterWebhook(client: SupabaseClient, envelope: Tyx
         return { ignored: true };
       }
 
+      const enriched = await enrichMinimalPayload(messageId, payload, metadata);
+
       const conversation = await getOrCreateConversation(client, {
         phone_number_id: phoneNumberId,
         contact_phone: contactPhone,
@@ -77,11 +122,17 @@ export async function processTyxterWebhook(client: SupabaseClient, envelope: Tyx
         conversation_id: conversation.id,
         tyxter_message_id: messageId,
         author_type: "customer",
-        message_type: extractMessageType(payload),
-        text_body: extractTextFromPayload(payload),
-        media_kind: extractMediaKind(payload),
-        payload,
-        metadata,
+        message_type: extractMessageType(enriched.payload),
+        text_body: extractTextFromPayload(enriched.payload),
+        media_kind: extractMediaKind(enriched.payload),
+        media_asset_id: extractMediaAssetId(enriched.payload),
+        media_url: extractMediaUrl(enriched.payload),
+        media_mime_type: extractMediaMimeType(enriched.payload),
+        media_filename: extractMediaFilename(enriched.payload),
+        media_caption: extractMediaCaption(enriched.payload),
+        transcript: extractTranscriptFromPayload(enriched.payload),
+        payload: enriched.payload,
+        metadata: enriched.metadata,
         status: "received",
         occurred_at: event.occurredAt,
       });
@@ -100,6 +151,8 @@ export async function processTyxterWebhook(client: SupabaseClient, envelope: Tyx
         return { ignored: true };
       }
 
+      const enriched = await enrichMinimalPayload(messageId, payload, metadata);
+
       const conversation = await getOrCreateConversation(client, {
         phone_number_id: phoneNumberId,
         contact_phone: contactPhone,
@@ -108,13 +161,19 @@ export async function processTyxterWebhook(client: SupabaseClient, envelope: Tyx
       await upsertOutboundMessage(client, {
         conversation_id: conversation.id,
         tyxter_message_id: messageId,
-        author_type: inferAuthorType(metadata),
-        operator_id: asUuidOrNull(metadata?.operator_id),
-        message_type: extractMessageType(payload),
-        text_body: extractTextFromPayload(payload),
-        media_kind: extractMediaKind(payload),
-        payload,
-        metadata,
+        author_type: inferAuthorType(enriched.metadata),
+        operator_id: asUuidOrNull(enriched.metadata?.operator_id),
+        message_type: extractMessageType(enriched.payload),
+        text_body: extractTextFromPayload(enriched.payload),
+        media_kind: extractMediaKind(enriched.payload),
+        media_asset_id: extractMediaAssetId(enriched.payload),
+        media_url: extractMediaUrl(enriched.payload),
+        media_mime_type: extractMediaMimeType(enriched.payload),
+        media_filename: extractMediaFilename(enriched.payload),
+        media_caption: extractMediaCaption(enriched.payload),
+        transcript: extractTranscriptFromPayload(enriched.payload),
+        payload: enriched.payload,
+        metadata: enriched.metadata,
         status: "sent",
         occurred_at: event.occurredAt,
       });
@@ -139,6 +198,11 @@ export async function processTyxterWebhook(client: SupabaseClient, envelope: Tyx
           : undefined;
 
       await updateMessageStatus(client, messageId, nextStatus, failureMetadata);
+      return { ok: true };
+    }
+    case "message.media_transcribed": {
+      if (!messageId) return { ignored: true };
+      await updateMessageTranscription(client, messageId, transcriptionValues(data));
       return { ok: true };
     }
     default:

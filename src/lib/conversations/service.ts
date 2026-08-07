@@ -64,6 +64,59 @@ export function extractTextFromPayload(payload: Record<string, unknown> | null |
   return typeof text === "string" ? text : null;
 }
 
+function asRecord(value: unknown) {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function firstString(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function collectCandidateRecords(payload: Record<string, unknown> | null | undefined) {
+  if (!payload) {
+    return [];
+  }
+
+  const content = asRecord(payload.content);
+  const message = asRecord(payload.message);
+  const media = asRecord(payload.media);
+
+  return [
+    payload,
+    content,
+    message,
+    media,
+    asRecord(content?.media),
+    asRecord(content?.audio),
+    asRecord(content?.image),
+    asRecord(content?.document),
+    asRecord(content?.video),
+    asRecord(content?.sticker),
+    asRecord(payload.audio),
+    asRecord(payload.image),
+    asRecord(payload.document),
+    asRecord(payload.video),
+    asRecord(payload.sticker),
+    asRecord(message?.media),
+    asRecord(message?.audio),
+    asRecord(message?.image),
+    asRecord(message?.document),
+    asRecord(message?.video),
+    asRecord(message?.sticker),
+    asRecord(media?.audio),
+    asRecord(media?.image),
+    asRecord(media?.document),
+    asRecord(media?.video),
+    asRecord(media?.sticker),
+  ].filter((value): value is Record<string, unknown> => Boolean(value));
+}
+
 export function extractMessageType(payload: Record<string, unknown> | null | undefined) {
   const contentType =
     (payload?.content as Record<string, unknown> | undefined)?.type ??
@@ -77,9 +130,80 @@ export function extractMediaKind(payload: Record<string, unknown> | null | undef
   const mediaKind =
     (payload?.media as Record<string, unknown> | undefined)?.kind ??
     ((payload?.content as Record<string, unknown> | undefined)?.media as Record<string, unknown> | undefined)?.kind ??
-    ((payload?.message as Record<string, unknown> | undefined)?.media as Record<string, unknown> | undefined)?.kind;
+    ((payload?.message as Record<string, unknown> | undefined)?.media as Record<string, unknown> | undefined)?.kind ??
+    (typeof payload?.type === "string" ? payload.type : null);
 
-  return typeof mediaKind === "string" ? mediaKind : null;
+  return typeof mediaKind === "string" && ["audio", "image", "video", "document", "sticker", "media"].includes(mediaKind) ? mediaKind : null;
+}
+
+export function extractMediaAssetId(payload: Record<string, unknown> | null | undefined) {
+  for (const record of collectCandidateRecords(payload)) {
+    const assetId = firstString(record.asset_id);
+    if (assetId) return assetId;
+  }
+
+  return null;
+}
+
+export function extractMediaUrl(payload: Record<string, unknown> | null | undefined) {
+  for (const record of collectCandidateRecords(payload)) {
+    const url = firstString(record.link, record.url, record.download_url, record.preview_url, record.src);
+    if (url) {
+      return url;
+    }
+  }
+
+  return null;
+}
+
+export function extractMediaMimeType(payload: Record<string, unknown> | null | undefined) {
+  for (const record of collectCandidateRecords(payload)) {
+    const mimeType = firstString(record.mime_type, record.mimetype, record.content_type, record.type);
+    if (mimeType && mimeType.includes("/")) {
+      return mimeType;
+    }
+  }
+
+  return null;
+}
+
+export function extractMediaFilename(payload: Record<string, unknown> | null | undefined) {
+  for (const record of collectCandidateRecords(payload)) {
+    const filename = firstString(record.filename, record.file_name, record.name, record.title);
+    if (filename) {
+      return filename;
+    }
+  }
+
+  return null;
+}
+
+export function extractMediaCaption(payload: Record<string, unknown> | null | undefined) {
+  for (const record of collectCandidateRecords(payload)) {
+    const caption = firstString(record.caption, record.description);
+    if (caption) {
+      return caption;
+    }
+  }
+
+  return null;
+}
+
+export function extractTranscriptFromPayload(payload: Record<string, unknown> | null | undefined) {
+  for (const record of collectCandidateRecords(payload)) {
+    const transcript = firstString(
+      record.transcript,
+      record.transcription,
+      record.text,
+      asRecord(record.transcript)?.text,
+      asRecord(record.transcription)?.text,
+    );
+    if (transcript) {
+      return transcript;
+    }
+  }
+
+  return null;
 }
 
 export function buildLastMessagePreview(params: { textBody?: string | null; messageType: string; mediaKind?: string | null }) {

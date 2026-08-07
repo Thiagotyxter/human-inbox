@@ -1,7 +1,9 @@
 import { InboxLayout } from "@/components/inbox/inbox-layout";
+import { requirePageUser } from "@/lib/auth/user";
 import { getConversationWithMessages, listConversations } from "@/lib/conversations/repository";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getPhoneNumberOptions } from "@/lib/tyxter/phone-numbers";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +12,9 @@ export default async function InboxPage({
 }: {
   searchParams: Promise<{ conversationId?: string }>;
 }) {
+  const user = await requirePageUser();
+  if (!user) redirect("/login");
+
   const supabase = createSupabaseAdminClient();
 
   const params = await searchParams;

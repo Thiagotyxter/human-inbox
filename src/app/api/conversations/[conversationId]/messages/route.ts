@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { requireApiUser } from "@/lib/auth/user";
 import { getConversation, upsertOutboundMessage } from "@/lib/conversations/repository";
 import { jsonError } from "@/lib/http";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -12,6 +13,9 @@ const bodySchema = z.object({
 
 export async function POST(request: Request, context: { params: Promise<{ conversationId: string }> }) {
   try {
+    const { user } = await requireApiUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const supabase = createSupabaseAdminClient();
     const body = bodySchema.parse(await request.json());
     const { conversationId } = await context.params;
@@ -38,7 +42,7 @@ export async function POST(request: Request, context: { params: Promise<{ conver
       conversation_id: conversation.id,
       tyxter_message_id: sentMessage.id,
       author_type: "human",
-      operator_id: null,
+      operator_id: user.id,
       message_type: "text",
       text_body: body.text,
       media_kind: null,

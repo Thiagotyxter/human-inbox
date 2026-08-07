@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { requireApiUser } from "@/lib/auth/user";
 import { syncTyxterMessages } from "@/lib/conversations/tyxter-sync";
 import { jsonError } from "@/lib/http";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -14,6 +15,9 @@ const bodySchema = z
 
 export async function POST(request: Request) {
   try {
+    const { user } = await requireApiUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const body = bodySchema.parse(await request.json().catch(() => undefined));
     const phoneNumberId = await resolveTargetPhoneNumberId(body?.phoneNumberId ?? null);
     const admin = createSupabaseAdminClient();

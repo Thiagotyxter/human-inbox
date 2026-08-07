@@ -142,6 +142,12 @@ export async function getMessageByTyxterId(client: DbClient, tyxterMessageId: st
   );
 }
 
+export async function getMessageById(client: DbClient, messageId: string) {
+  return unwrapSingle<MessageRecord | null>(
+    client.from("messages").select("*").eq("id", messageId).maybeSingle(),
+  );
+}
+
 export async function insertMessage(
   client: DbClient,
   values: {
@@ -153,6 +159,14 @@ export async function insertMessage(
     message_type: string;
     text_body?: string | null;
     media_kind?: string | null;
+    media_asset_id?: string | null;
+    media_url?: string | null;
+    media_mime_type?: string | null;
+    media_filename?: string | null;
+    media_caption?: string | null;
+    transcript?: string | null;
+    transcription_status?: "pending" | "succeeded" | "failed" | null;
+    transcription_error?: string | null;
     payload?: Record<string, unknown> | null;
     metadata?: Record<string, unknown> | null;
     status?: string | null;
@@ -215,6 +229,14 @@ export async function upsertInboundMessage(
     message_type: string;
     text_body?: string | null;
     media_kind?: string | null;
+    media_asset_id?: string | null;
+    media_url?: string | null;
+    media_mime_type?: string | null;
+    media_filename?: string | null;
+    media_caption?: string | null;
+    transcript?: string | null;
+    transcription_status?: "pending" | "succeeded" | "failed" | null;
+    transcription_error?: string | null;
     payload?: Record<string, unknown> | null;
     metadata?: Record<string, unknown> | null;
     status?: string | null;
@@ -224,7 +246,20 @@ export async function upsertInboundMessage(
   const existing = await getMessageByTyxterId(client, values.tyxter_message_id);
 
   if (existing) {
-    return { message: existing, inserted: false };
+    const update = {
+      message_type: values.message_type,
+      text_body: values.text_body ?? existing.text_body,
+      media_kind: values.media_kind ?? existing.media_kind,
+      media_asset_id: values.media_asset_id ?? existing.media_asset_id,
+      media_mime_type: values.media_mime_type ?? existing.media_mime_type,
+      media_filename: values.media_filename ?? existing.media_filename,
+      media_caption: values.media_caption ?? existing.media_caption,
+      payload: values.payload ?? existing.payload,
+      metadata: values.metadata ?? existing.metadata,
+    };
+    const { error } = await client.from("messages").update(update).eq("id", existing.id);
+    if (error) throw error;
+    return { message: { ...existing, ...update }, inserted: false };
   }
 
   const message = await insertMessage(client, {
@@ -254,6 +289,14 @@ export async function upsertOutboundMessage(
     message_type: string;
     text_body?: string | null;
     media_kind?: string | null;
+    media_asset_id?: string | null;
+    media_url?: string | null;
+    media_mime_type?: string | null;
+    media_filename?: string | null;
+    media_caption?: string | null;
+    transcript?: string | null;
+    transcription_status?: "pending" | "succeeded" | "failed" | null;
+    transcription_error?: string | null;
     payload?: Record<string, unknown> | null;
     metadata?: Record<string, unknown> | null;
     status?: string | null;
@@ -331,6 +374,29 @@ export async function updateMessageStatus(
   }
 
   return { ...existing, status: nextStatus, metadata: nextMetadata };
+}
+
+export async function updateMessageTranscription(
+  client: DbClient,
+  tyxterMessageId: string,
+  values: {
+    status: "pending" | "succeeded" | "failed";
+    transcript?: string | null;
+    error?: string | null;
+  },
+) {
+  const existing = await getMessageByTyxterId(client, tyxterMessageId);
+  if (!existing) return null;
+
+  const update = {
+    transcription_status: values.status,
+    transcript: values.transcript ?? existing.transcript,
+    transcription_error: values.error ?? null,
+  };
+  const { error } = await client.from("messages").update(update).eq("id", existing.id);
+  if (error) throw error;
+
+  return { ...existing, ...update };
 }
 
 export async function setConversationMode(

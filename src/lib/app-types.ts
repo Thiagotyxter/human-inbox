@@ -32,6 +32,14 @@ export interface MessageRecord {
   message_type: string;
   text_body: string | null;
   media_kind: string | null;
+  media_asset_id: string | null;
+  media_url: string | null;
+  media_mime_type: string | null;
+  media_filename: string | null;
+  media_caption: string | null;
+  transcript: string | null;
+  transcription_status: "pending" | "succeeded" | "failed" | null;
+  transcription_error: string | null;
   payload: Record<string, unknown> | null;
   metadata: Record<string, unknown> | null;
   status: string | null;

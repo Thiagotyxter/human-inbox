@@ -1,70 +1,113 @@
 # Tyxter Human Inbox
 
-Inbox web enxuta para visualizar conversas do WhatsApp via Tyxter, assumir uma conversa para atendimento humano e depois devolvê-la ao agente.
+Template open source para acompanhar conversas do WhatsApp atendidas por agentes na Tyxter e assumir o atendimento humano quando necessário.
+
+O projeto inclui histórico em tempo real, imagens, áudios, documentos, transcrição de áudio, envio manual e controle de handoff entre agente e operador. A stack padrão é Next.js, Vercel e Supabase.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Thiagotyxter/human-inbox&env=TYXTER_API_KEY,TYXTER_WEBHOOK_SIGNING_SECRET,NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,SUPABASE_SERVICE_ROLE_KEY,AGENT_CONTROL_SHARED_SECRET)
+
+## O que este template entrega
+
+- Inbox de conversas inbound e outbound do WhatsApp.
+- Sincronização inicial e atualização por webhooks Tyxter.
+- Imagens, stickers, áudios, vídeos e documentos inbound.
+- Transcrição assíncrona de áudio inbound.
+- Supabase Auth, Postgres e Realtime.
+- Takeover humano, devolução ao agente e envio manual.
+- Endpoint e helper `canAgentReply` para interromper o agente durante o takeover.
+- Migrations versionadas e deploy pronto para Vercel.
 
 ## Stack
 
-- Next.js App Router
-- TypeScript
+- Next.js 16 App Router, React 19 e TypeScript
 - Tailwind CSS
-- Supabase Auth
-- Supabase Postgres
-- Supabase Realtime
+- Supabase Auth, Postgres e Realtime
+- Tyxter Messaging API e webhooks
 - Vercel
 
-## O que foi implementado
+## Instruções para agentes de implementação
 
-- Login com Supabase Auth por e-mail e senha
-- Inbox desktop simples em `/inbox`
-- Sincronização inicial via `POST /api/sync`
-- Webhook assinado em `POST /api/webhooks/tyxter`
-- Listagem de conversas e mensagens inbound/outbound
-- Assumir e devolver conversas (`agent` / `human`)
-- Envio manual de texto quando a conversa está em modo `human`
-- Reprodução de áudio via `GET /api/messages/[messageId]/media`
-- Atualização em tempo real via Supabase Realtime
-- Função reutilizável `canAgentReply(phoneNumberId, contactPhone)`
-- Endpoint interno para agentes externos TypeScript consultarem `canAgentReply`
+Este repositório foi preparado para ser entregue a um agente de código. Se você é o agente responsável pela instalação:
 
-## Estrutura
+1. Leia este README inteiro e o `AGENTS.md` antes de editar código.
+2. Confirme quais projetos Tyxter, Supabase e Vercel devem ser usados.
+3. Nunca imprima, versione ou envie segredos em logs, commits ou respostas.
+4. Crie o projeto Supabase e aplique **todas** as migrations em ordem.
+5. Configure as variáveis localmente e na Vercel.
+6. Faça o primeiro deploy antes de cadastrar o webhook, pois a Tyxter precisa de HTTPS público.
+7. Cadastre o webhook com todos os eventos listados abaixo.
+8. Salve o `signing_secret` retornado pela Tyxter e faça um novo deploy.
+9. Crie o primeiro operador e desabilite cadastros públicos se o inbox for privado.
+10. Integre `canAgentReply` no agente antes e depois da geração de resposta.
+11. Execute typecheck, lint, build e o checklist manual.
+12. Entregue URLs, recursos criados e passos manuais restantes sem revelar credenciais.
+
+Não substitua Supabase ou Vercel sem solicitação explícita. Eles são o caminho suportado pelo template.
+
+## Arquitetura
 
 ```text
-src/
-  app/
-    login/
-    inbox/
-    api/
-  components/
-    inbox/
-  lib/
-    auth/
-    conversations/
-    supabase/
-    tyxter/
-
-supabase/
-  migrations/
+WhatsApp
+   │
+   ▼
+Tyxter ── mensagens / status / transcrição ──► Webhook Next.js
+   ▲                                               │
+   │                                               ▼
+   ├── envio / media capability / transcription  Supabase
+   │                                               │
+   │                                               ▼
+Agente externo ◄── canAgentReply ── Human Inbox ◄── Realtime
 ```
+
+A Tyxter espelha mídias inbound em assets próprios. O inbox persiste o `asset_id`, solicita uma capability curta e entrega os bytes pelo backend. URLs privadas da Meta e a API key nunca são expostas ao navegador.
 
 ## Pré-requisitos
 
-- Node.js 22 ou superior
-- npm 10 ou superior
-- Um projeto Supabase
-- Uma API key Tyxter
-- Um deploy Vercel para receber o webhook público
+- Node.js 22+ e npm 10+
+- Conta, API key e número WhatsApp conectado na Tyxter
+- Projeto Supabase
+- Conta Vercel
+- Git; CLIs `supabase` e `vercel` são recomendadas
 
-## Variáveis de ambiente
-
-Copie `.env.example` para `.env.local`:
+## 1. Clone e instale
 
 ```bash
+git clone https://github.com/Thiagotyxter/human-inbox.git
+cd human-inbox
+npm install
 cp .env.example .env.local
 ```
 
-Preencha:
+## 2. Configure o Supabase
+
+Crie um projeto em [supabase.com](https://supabase.com). Em `Project Settings > API`, obtenha o Project URL, a anon key e a service role key.
+
+Nunca exponha a service role no navegador nem a prefixe com `NEXT_PUBLIC_`.
+
+### Aplique as migrations
 
 ```bash
+supabase login
+supabase link --project-ref SEU_PROJECT_REF
+supabase db push
+```
+
+Alternativamente, execute os arquivos de `supabase/migrations/` em ordem no SQL Editor. Eles criam tabelas, índices, triggers, RLS, Realtime e os campos de mídia/transcrição. Não pule migrations.
+
+### Configure autenticação
+
+1. Habilite Email em `Authentication > Providers`.
+2. Adicione `http://localhost:3000` e o domínio final em `Authentication > URL Configuration`.
+3. Crie o primeiro operador em `/login` ou no painel.
+4. Para um inbox privado, desabilite novos cadastros públicos depois de criar os operadores.
+
+O template exige sessão Supabase no inbox e nas APIs operacionais. Webhooks usam assinatura Tyxter e a integração do agente usa outro segredo.
+
+## 3. Configure o ambiente
+
+Preencha `.env.local`:
+
+```dotenv
 TYXTER_API_KEY=
 TYXTER_API_BASE_URL=https://api.tyxter.com
 TYXTER_WEBHOOK_SIGNING_SECRET=
@@ -78,86 +121,21 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 AGENT_CONTROL_SHARED_SECRET=
 ```
 
-Observações:
-
-- `TYXTER_PHONE_NUMBER_ID` é opcional.
-- Se existir apenas um número ativo, a aplicação o usa automaticamente.
-- Se houver mais de um número ativo, a UI permite filtrar por número.
-- Nunca exponha `TYXTER_API_KEY`, `TYXTER_WEBHOOK_SIGNING_SECRET` ou `SUPABASE_SERVICE_ROLE_KEY` no frontend.
-- `AGENT_CONTROL_SHARED_SECRET` protege o endpoint interno consumido por agentes externos.
-
-## Como criar o projeto no Supabase
-
-1. Crie um novo projeto no Supabase.
-2. Em `Project Settings > API`, copie:
-   - `Project URL`
-   - `anon public key`
-   - `service_role key`
-3. Em `Authentication > Providers`, deixe `Email` habilitado.
-4. Em `Authentication > URL Configuration`, configure a URL do app local e depois da Vercel.
-
-## Como executar as migrations
-
-As migrations estão em:
-
-```text
-supabase/migrations/20260804213000_initial_inbox.sql
-```
-
-Você pode aplicar de dois jeitos.
-
-### Opção 1: SQL Editor do Supabase
-
-Cole o SQL da migration no editor e execute.
-
-### Opção 2: Supabase CLI
+`TYXTER_PHONE_NUMBER_ID` é opcional. Gere um segredo forte para controle do agente:
 
 ```bash
-npm install -g supabase
-supabase login
-supabase link --project-ref <project-ref>
-supabase db push
+openssl rand -hex 32
 ```
 
-## O que a migration cria
+O signing secret será preenchido depois do primeiro deploy.
 
-- `profiles`
-- `conversations`
-- `messages`
-- `processed_webhook_events`
-- `conversation_events`
-- enum `conversation_mode`
-- índices exigidos para `conversations.last_message_at`, `messages.conversation_id`, `messages.occurred_at`, `messages.tyxter_message_id`
-- trigger de `updated_at`
-- trigger para criar `profiles` ao criar usuário
-- RLS para leitura autenticada
-- tabelas no `supabase_realtime`
-
-## Como configurar o Supabase Auth
-
-1. Habilite `Email`.
-2. Crie o primeiro usuário pelo próprio formulário em `/login` ou pelo painel do Supabase.
-3. Se você exigir confirmação de e-mail no projeto, confirme o e-mail antes de usar `/inbox`.
-
-## Instalação
-
-```bash
-npm install
-```
-
-## Execução local
+## 4. Execute e valide localmente
 
 ```bash
 npm run dev
 ```
 
-Abra:
-
-```text
-http://localhost:3000/login
-```
-
-## Comandos de validação
+Abra `http://localhost:3000/login`.
 
 ```bash
 npm run typecheck
@@ -165,108 +143,29 @@ npm run lint
 npm run build
 ```
 
-Observação:
+## 5. Faça o deploy na Vercel
 
-- O script de build usa `next build --webpack` para evitar um problema do Turbopack no sandbox usado durante a implementação em Wednesday, August 5, 2026.
+Importe o repositório na Vercel ou use:
 
-## Integracao com agentes externos TypeScript
-
-Quando o agente roda fora da Tyxter e fora desta aplicacao, o bloqueio de handoff precisa acontecer no backend do proprio agente.
-
-Esta aplicacao expoe:
-
-```text
-GET /api/agent-control/can-reply?phone_number_id=...&contact_phone=...
+```bash
+vercel link
+vercel env add TYXTER_API_KEY production
+vercel env add NEXT_PUBLIC_SUPABASE_URL production
+vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
+vercel env add SUPABASE_SERVICE_ROLE_KEY production
+vercel env add AGENT_CONTROL_SHARED_SECRET production
+vercel --prod
 ```
 
-Autenticacao:
+Configure também `NEXT_PUBLIC_APP_URL=https://seu-dominio.vercel.app` e `TYXTER_API_BASE_URL=https://api.tyxter.com`. Ao alterar variáveis, faça redeploy.
 
-- `Authorization: Bearer <AGENT_CONTROL_SHARED_SECRET>`
-- ou `x-agent-control-secret: <AGENT_CONTROL_SHARED_SECRET>`
+## 6. Cadastre o webhook na Tyxter
 
-Resposta:
-
-```json
-{
-  "data": {
-    "can_agent_reply": true,
-    "mode": "agent",
-    "phone_number_id": "pn_123",
-    "contact_phone": "+5511999999999"
-  }
-}
-```
-
-Regra:
-
-- sem conversa registrada: `can_agent_reply = true`
-- `mode = agent`: `true`
-- `mode = human`: `false`
-
-Para agentes TypeScript, existe um helper pronto em:
-
-```text
-examples/ts-agent/
-```
-
-O backend do agente deve consultar esse endpoint:
-
-1. antes de rodar o agente
-2. antes de enviar a resposta final
-
-Isso evita a race:
-
-1. cliente manda mensagem
-2. agente comeca a gerar
-3. operador assume a conversa
-4. agente termina
-5. resposta nao deve mais ser enviada
-
-## Primeiro deploy na Vercel
-
-1. Suba este projeto para um repositório Git.
-2. Importe o repositório na Vercel.
-3. Configure as mesmas variáveis de ambiente da `.env.local`.
-4. Faça o primeiro deploy.
-5. Anote a URL pública do projeto, por exemplo:
-
-```text
-https://seu-dominio.vercel.app
-```
-
-## URL pública do webhook
-
-Depois do primeiro deploy, a URL do webhook será:
+O endpoint será:
 
 ```text
 https://seu-dominio.vercel.app/api/webhooks/tyxter
 ```
-
-## Como cadastrar o webhook na Tyxter
-
-Use a rota pública documentada:
-
-```text
-POST /v1/webhook-endpoints
-```
-
-Payload confirmado no material local da Tyxter:
-
-```json
-{
-  "url": "https://seu-dominio.vercel.app/api/webhooks/tyxter",
-  "description": "Inbox humana Tyxter",
-  "subscribed_events": [
-    "message.received",
-    "message.sent",
-    "message.delivered",
-    "message.read",
-    "message.failed"
-  ]
-}
-```
-
-Exemplo com `curl`:
 
 ```bash
 curl -X POST "https://api.tyxter.com/v1/webhook-endpoints" \
@@ -274,247 +173,140 @@ curl -X POST "https://api.tyxter.com/v1/webhook-endpoints" \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://seu-dominio.vercel.app/api/webhooks/tyxter",
-    "description": "Inbox humana Tyxter",
+    "description": "Tyxter Human Inbox",
     "subscribed_events": [
       "message.received",
       "message.sent",
       "message.delivered",
       "message.read",
-      "message.failed"
+      "message.failed",
+      "message.media_transcribed"
     ]
   }'
 ```
 
-Guarde o `signing_secret` retornado. A Tyxter só retorna esse valor uma vez.
+Guarde o `signing_secret`, configure-o como `TYXTER_WEBHOOK_SIGNING_SECRET` na Vercel e faça outro deploy. Ele pode ser exibido somente uma vez. Em produção, webhooks sem assinatura válida recebem 401.
 
-## Como salvar o signing secret
+## 7. Sincronize o histórico
 
-1. Copie o `signing_secret` retornado pela Tyxter.
-2. Salve na Vercel como:
+Autentique e clique em `Sincronizar`. `POST /api/sync` pagina `GET /v1/messages?include=payload`, importa inbound/outbound e é idempotente.
 
-```bash
-TYXTER_WEBHOOK_SIGNING_SECRET=...
-```
+## 8. Integre o takeover ao agente
 
-3. Faça um novo deploy.
-
-Em produção, esta aplicação rejeita webhooks sem assinatura válida.
-
-## Como identificar números conectados
-
-A aplicação consulta:
+Takeover muda o modo para `human`, mas não interrompe sozinho um agente hospedado em outro serviço. Esse agente deve consultar:
 
 ```text
-GET /v1/phone-numbers
+GET /api/agent-control/can-reply?phone_number_id=...&contact_phone=...
+Authorization: Bearer <AGENT_CONTROL_SHARED_SECRET>
 ```
-
-Regras implementadas:
-
-- se houver um único número ativo, ele é usado automaticamente;
-- se `TYXTER_PHONE_NUMBER_ID` estiver preenchido, ele é priorizado;
-- se houver vários números ativos, a interface pode filtrar por número.
-
-## Como disparar a sincronização inicial
-
-Em desenvolvimento, a aplicação funciona mesmo sem webhook por meio desta rota:
-
-```text
-POST /api/sync
-```
-
-Exemplo:
-
-```bash
-curl -X POST "http://localhost:3000/api/sync" \
-  -H "Content-Type: application/json" \
-  -H "Cookie: <sua-sessao-supabase>"
-```
-
-Ou use o botão `Sincronizar` na sidebar após login.
-
-A sincronização:
-
-- exige autenticação;
-- usa `GET /v1/messages`;
-- usa `include=payload`;
-- usa paginação por `starting_after`;
-- importa inbound e outbound;
-- é idempotente;
-- pode rodar várias vezes.
-
-## Como testar uma mensagem inbound
-
-Fluxo recomendado:
-
-1. Faça login.
-2. Rode a sincronização inicial.
-3. Envie uma mensagem real para o número conectado à Tyxter.
-4. Com webhook configurado, a mensagem deve entrar automaticamente.
-5. Sem webhook configurado ainda, clique em `Sincronizar`.
-
-## Como assumir uma conversa
-
-Na inbox:
-
-1. Selecione a conversa.
-2. Clique em `Assumir conversa`.
-3. A rota usada é:
-
-```text
-POST /api/conversations/[conversationId]/takeover
-```
-
-O sistema:
-
-- muda `mode` para `human`;
-- define `assigned_operator_id`;
-- grava `conversation.assigned_to_human`;
-- atualiza a UI em realtime.
-
-## Como devolver ao agente
-
-Na inbox:
-
-1. Abra a conversa em modo humano.
-2. Clique em `Devolver ao agente`.
-3. A rota usada é:
-
-```text
-POST /api/conversations/[conversationId]/release
-```
-
-O sistema:
-
-- muda `mode` para `agent`;
-- limpa `assigned_operator_id`;
-- grava `conversation.returned_to_agent`;
-- atualiza a UI em realtime.
-
-## Como funciona o envio manual
-
-Rota:
-
-```text
-POST /api/conversations/[conversationId]/messages
-```
-
-Body:
 
 ```json
 {
-  "text": "Mensagem enviada pelo operador"
+  "data": {
+    "can_agent_reply": false,
+    "mode": "human",
+    "phone_number_id": "pn_123",
+    "contact_phone": "+5511999999999"
+  }
 }
 ```
 
-Regras:
-
-- exige autenticação;
-- valida com Zod;
-- só envia se a conversa estiver em `mode = human`;
-- usa `POST /v1/messages`;
-- envia `metadata.source = "human_inbox"`;
-- salva a mensagem no Postgres.
-
-## Como funciona a mídia de áudio
-
-Rota:
-
-```text
-GET /api/messages/[messageId]/media
-```
-
-Regras:
-
-- exige autenticação;
-- busca a URL de mídia no backend;
-- nunca expõe a API key;
-- faz redirect ou proxy seguro;
-- não usa Supabase Storage;
-- renderiza no frontend com `<audio controls />`.
-
-## Como integrar `canAgentReply` ao agente existente
-
-Função pronta:
+Verifique antes da geração e antes do envio:
 
 ```ts
-import { canAgentReply } from "@/lib/conversations/can-agent-reply";
-```
-
-Assinatura:
-
-```ts
-canAgentReply(phoneNumberId: string, contactPhone: string): Promise<boolean>
-```
-
-Uso esperado no backend do agente:
-
-1. Ao receber uma mensagem inbound, salve a mensagem na inbox.
-2. Antes de iniciar a geração da resposta, consulte `canAgentReply`.
-3. Se retornar `false`, não chame o agente.
-4. Se retornar `true`, o agente pode continuar.
-5. Antes de enviar uma resposta já gerada, consulte `canAgentReply` novamente.
-6. Se o modo tiver mudado para `human`, descarte a resposta automática.
-
-Exemplo:
-
-```ts
-const allowedBeforeGeneration = await canAgentReply(phoneNumberId, contactPhone);
-if (!allowedBeforeGeneration) return;
-
+if (!(await canAgentReply(phoneNumberId, contactPhone))) return;
 const reply = await generateAgentReply();
-
-const allowedBeforeSend = await canAgentReply(phoneNumberId, contactPhone);
-if (!allowedBeforeSend) return;
-
+if (!(await canAgentReply(phoneNumberId, contactPhone))) return;
 await sendReply(reply);
 ```
 
-## Realtime
+Isso evita a race em que o operador assume enquanto a resposta está sendo gerada. Há um cliente em `examples/ts-agent/`.
 
-O frontend assina mudanças nas tabelas:
+## Mídia inbound
 
-- `conversations`
-- `messages`
-- `conversation_events`
+No `message.received`, o template lê `data.content.media.asset_id`.
 
-via Supabase Realtime.
+1. O navegador solicita `/api/messages/[messageId]/media` autenticado.
+2. O backend chama `GET /v1/media/{asset_id}/download-url`.
+3. O backend baixa a capability autenticada e transmite os bytes.
+4. A URL curta nunca é persistida.
 
-## Limitações atuais
+São suportados image, audio, video, document e sticker.
 
-- Esta aplicação não pausa um agente externo sozinha. Ela só controla o estado `agent/human` e expõe `canAgentReply`.
-- Se o agente atual roda fora desta aplicação e não consultar `canAgentReply`, o handoff não interromperá a automação por si só.
-- O endpoint de mídia inbound depende da URL temporária presente no detalhe da mensagem retornado pela Tyxter. Não há cópia persistida localmente.
-- A documentação principal citada no pedido, `Texto colado(35).txt`, não estava acessível no workspace durante a implementação; por isso a confirmação dos endpoints foi feita com o corpus local de documentação Tyxter presente em `tyxter-messaging/packages/platform/docs-corpus` e com `/openapi.json`.
-- O build validado durante a implementação rodou em um ambiente cuja ferramenta de execução usava Node.js 20, o que gera warnings do `@supabase/supabase-js`. O projeto deve ser executado com Node.js 22 ou superior.
+## Transcrição de áudio
 
-## Arquivos principais criados
+O template usa:
 
-- `src/app/login/page.tsx`
-- `src/app/inbox/page.tsx`
-- `src/app/api/sync/route.ts`
-- `src/app/api/webhooks/tyxter/route.ts`
-- `src/app/api/phone-numbers/route.ts`
-- `src/app/api/conversations/...`
-- `src/app/api/messages/[messageId]/media/route.ts`
-- `src/components/inbox/*`
-- `src/lib/supabase/*`
-- `src/lib/tyxter/*`
-- `src/lib/conversations/*`
-- `supabase/migrations/20260804213000_initial_inbox.sql`
-- `.env.example`
+- `POST /v1/messages/{message_id}/transcription`
+- `GET /v1/messages/{message_id}/transcription`
+- webhook `message.media_transcribed`
 
-## Checklist de aceite coberto
+Os estados persistidos são `pending`, `succeeded` e `failed`.
 
-- login
-- listagem de conversas
-- sincronização inicial
-- webhook de novas mensagens
-- histórico inbound e outbound
-- áudio reproduzível
-- takeover
-- retorno ao agente
-- prevenção de duplicidade por webhook
-- atualização monotônica de status
-- secrets no backend
-- migrations incluídas
-- projeto validado com `typecheck`, `lint` e `build`
+## Personalização
+
+- Visual: `src/app/globals.css` e `src/components/inbox/`
+- Handoff: `src/lib/conversations/handoff.ts`
+- Controle do agente: `src/lib/conversations/can-agent-reply.ts`
+- Webhooks: `src/lib/conversations/tyxter-events.ts`
+- Cliente Tyxter: `src/lib/tyxter/`
+- Banco: `supabase/migrations/`
+
+Crie migrations novas; não reescreva migrations já aplicadas.
+
+## Segurança
+
+- Nunca envie a API key Tyxter ou service role para Client Components.
+- Mantenha RLS habilitado e não crie leitura `anon` para dados do inbox.
+- Restrinja criação de operadores.
+- Verifique assinatura do webhook em produção.
+- Use segredos distintos para webhook e controle do agente.
+- Não persista capabilities de mídia.
+- Revogue imediatamente qualquer segredo versionado por engano.
+
+## Checklist de aceite
+
+- [ ] Todas as migrations foram aplicadas.
+- [ ] Operador autorizado entra; usuário sem sessão vai para `/login`.
+- [ ] Sync importa histórico sem duplicar.
+- [ ] Webhooks atualizam mensagens em tempo real.
+- [ ] Imagem/sticker carregam; áudio permite seek; documentos/vídeos abrem.
+- [ ] Transcrição percorre pending até succeeded ou failed.
+- [ ] Takeover, envio humano e release funcionam.
+- [ ] O agente não responde quando `can_agent_reply` é false.
+- [ ] Webhook inválido recebe 401.
+- [ ] Typecheck, lint e build passam.
+
+## Troubleshooting
+
+### Mídia retorna 401
+
+- Confirme que `TYXTER_API_KEY` pertence ao projeto que recebeu a mensagem.
+- Use o `asset_id` Tyxter, não o ID de provider da Meta.
+- Não consuma `lookaside.fbsbx.com` diretamente.
+- Gere uma capability nova, pois ela expira rapidamente.
+
+### Mídia retorna 404
+
+- Aplique todas as migrations.
+- Rode sync novamente para enriquecer mensagens antigas.
+- Confirme `data.content.media.asset_id` no webhook.
+
+### Webhook retorna 401
+
+- Confirme que o signing secret corresponde ao endpoint cadastrado.
+- Se recriou o endpoint, atualize a Vercel e faça redeploy.
+
+### O agente continua respondendo
+
+- Integre `canAgentReply` no backend real do agente.
+- Verifique antes da geração e imediatamente antes do envio.
+- Use os mesmos `phone_number_id` e `contact_phone` persistidos pelo inbox.
+
+## Contribuindo
+
+Veja [CONTRIBUTING.md](CONTRIBUTING.md). Issues e pull requests são bem-vindos.
+
+## Licença
+
+MIT — veja [LICENSE](LICENSE).

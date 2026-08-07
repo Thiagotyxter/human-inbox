@@ -54,6 +54,30 @@ export interface TyxterMessage {
   provider_error?: Record<string, unknown> | null;
 }
 
+export interface TyxterMediaDownloadCapability {
+  url?: string;
+  download_url?: string;
+  expires_at?: string;
+  data?: {
+    url?: string;
+    download_url?: string;
+    expires_at?: string;
+  };
+}
+
+export interface TyxterMessageTranscription {
+  status: "pending" | "succeeded" | "failed";
+  text?: string | null;
+  transcript?: string | null;
+  error?: string | { message?: string } | null;
+  data?: {
+    status?: "pending" | "succeeded" | "failed";
+    text?: string | null;
+    transcript?: string | null;
+    error?: string | { message?: string } | null;
+  };
+}
+
 export interface TyxterPhoneNumber {
   id: string;
   status?: string | null;

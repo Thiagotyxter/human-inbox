@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import { tyxterFetch, tyxterFetchRaw } from "@/lib/tyxter/client";
-import type { TyxterListResponse, TyxterMessage } from "@/lib/tyxter/types";
+import { env, requireTyxterApiKey } from "@/lib/env";
+import { tyxterFetch } from "@/lib/tyxter/client";
+import type { TyxterListResponse, TyxterMediaDownloadCapability, TyxterMessage, TyxterMessageTranscription } from "@/lib/tyxter/types";
 
 export interface ListMessagesParams {
   direction?: "inbound" | "outbound";
@@ -22,7 +23,27 @@ export async function listTyxterMessages(params: ListMessagesParams) {
 }
 
 export async function getTyxterMessage(messageId: string) {
-  return tyxterFetch<TyxterMessage>(`/v1/messages/${messageId}`);
+  return tyxterFetch<TyxterMessage>(`/v1/messages/${messageId}`, {
+    query: {
+      include: "payload",
+    },
+  });
+}
+
+export async function createTyxterMediaDownloadUrl(assetId: string) {
+  const capability = await tyxterFetch<TyxterMediaDownloadCapability>(`/v1/media/${encodeURIComponent(assetId)}/download-url`);
+  const url = capability.download_url ?? capability.url ?? capability.data?.download_url ?? capability.data?.url;
+
+  if (!url) throw new Error("Tyxter did not return a media download URL.");
+  return url;
+}
+
+export async function requestTyxterMessageTranscription(messageId: string) {
+  return tyxterFetch<TyxterMessageTranscription>(`/v1/messages/${encodeURIComponent(messageId)}/transcription`, { method: "POST" });
+}
+
+export async function getTyxterMessageTranscription(messageId: string) {
+  return tyxterFetch<TyxterMessageTranscription>(`/v1/messages/${encodeURIComponent(messageId)}/transcription`);
 }
 
 export async function sendTyxterTextMessage(params: {
@@ -46,51 +67,17 @@ export async function sendTyxterTextMessage(params: {
   });
 }
 
-function extractMediaLink(value: unknown): string | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
+export async function fetchTyxterMedia(link: string, range?: string | null) {
+  const linkUrl = new URL(link);
+  const tyxterOrigin = new URL(env.TYXTER_API_BASE_URL).origin;
+  const headers = new Headers();
 
-  const record = value as Record<string, unknown>;
-  const candidates = [
-    record.link,
-    record.url,
-    (record.audio as Record<string, unknown> | undefined)?.link,
-    (record.media as Record<string, unknown> | undefined)?.link,
-    (record.media as Record<string, unknown> | undefined)?.url,
-    (record.generated_audio as Record<string, unknown> | undefined)?.preview_url,
-    (record.generated_audio as Record<string, unknown> | undefined)?.url,
-  ];
+  if (range) headers.set("Range", range);
+  if (linkUrl.origin === tyxterOrigin) headers.set("Authorization", `Bearer ${requireTyxterApiKey()}`);
 
-  for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.length > 0) {
-      return candidate;
-    }
-  }
-
-  return null;
-}
-
-export async function resolveTyxterMessageMediaUrl(messageId: string) {
-  const detail = await getTyxterMessage(messageId);
-  const link =
-    extractMediaLink(detail.payload) ??
-    extractMediaLink((detail.payload as Record<string, unknown> | null)?.message) ??
-    extractMediaLink(detail.metadata);
-
-  if (!link) {
-    return null;
-  }
-
-  return link;
-}
-
-export async function fetchTyxterMedia(link: string) {
-  const url = new URL(link);
-
-  if (url.origin === new URL("https://api.tyxter.com").origin) {
-    return tyxterFetchRaw(url.pathname + url.search);
-  }
-
-  return fetch(link, { cache: "no-store", redirect: "follow" });
+  return fetch(link, {
+    cache: "no-store",
+    redirect: "follow",
+    headers,
+  });
 }

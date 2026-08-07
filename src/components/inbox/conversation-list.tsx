@@ -11,11 +11,15 @@ export function ConversationList({
   onSelect: (conversationId: string) => void;
 }) {
   if (conversations.length === 0) {
-    return <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">Nenhuma conversa encontrada.</div>;
+    return (
+      <div className="rounded-[24px] border border-dashed border-[var(--border)] bg-white/65 p-6 text-sm text-[var(--muted)]">
+        Nenhuma conversa encontrada.
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       {conversations.map((conversation) => (
         <ConversationItem
           key={conversation.id}

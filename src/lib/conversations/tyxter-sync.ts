@@ -1,6 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { inferAuthorType, extractMediaKind, extractMessageType, extractTextFromPayload } from "@/lib/conversations/service";
+import {
+  inferAuthorType,
+  extractMediaCaption,
+  extractMediaAssetId,
+  extractMediaFilename,
+  extractMediaKind,
+  extractMediaMimeType,
+  extractMediaUrl,
+  extractMessageType,
+  extractTextFromPayload,
+  extractTranscriptFromPayload,
+} from "@/lib/conversations/service";
 import {
   getOrCreateConversation,
   upsertInboundMessage,
@@ -24,6 +35,12 @@ function normalizeMessageCore(message: TyxterMessage) {
   const messageType = extractMessageType(payload);
   const textBody = extractTextFromPayload(payload);
   const mediaKind = extractMediaKind(payload);
+  const mediaAssetId = extractMediaAssetId(payload);
+  const mediaUrl = extractMediaUrl(payload);
+  const mediaMimeType = extractMediaMimeType(payload);
+  const mediaFilename = extractMediaFilename(payload);
+  const mediaCaption = extractMediaCaption(payload);
+  const transcript = extractTranscriptFromPayload(payload);
   const occurredAt = message.occurred_at ?? message.updated_at ?? message.created_at ?? new Date().toISOString();
 
   return {
@@ -35,6 +52,12 @@ function normalizeMessageCore(message: TyxterMessage) {
     messageType,
     textBody,
     mediaKind,
+    mediaAssetId,
+    mediaUrl,
+    mediaMimeType,
+    mediaFilename,
+    mediaCaption,
+    transcript,
     occurredAt,
   };
 }
@@ -101,6 +124,12 @@ export async function syncTyxterMessages(
             message_type: normalized.messageType,
             text_body: normalized.textBody,
             media_kind: normalized.mediaKind,
+            media_asset_id: normalized.mediaAssetId,
+            media_url: normalized.mediaUrl,
+            media_mime_type: normalized.mediaMimeType,
+            media_filename: normalized.mediaFilename,
+            media_caption: normalized.mediaCaption,
+            transcript: normalized.transcript,
             payload: normalized.payload,
             metadata: normalized.metadata,
             status: message.status ?? "received",
@@ -120,6 +149,12 @@ export async function syncTyxterMessages(
             message_type: normalized.messageType,
             text_body: normalized.textBody,
             media_kind: normalized.mediaKind,
+            media_asset_id: normalized.mediaAssetId,
+            media_url: normalized.mediaUrl,
+            media_mime_type: normalized.mediaMimeType,
+            media_filename: normalized.mediaFilename,
+            media_caption: normalized.mediaCaption,
+            transcript: normalized.transcript,
             payload: normalized.payload,
             metadata: normalized.metadata,
             status: message.status ?? "sent",

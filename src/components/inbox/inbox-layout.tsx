@@ -129,27 +129,28 @@ export function InboxLayout({
   }
 
   return (
-    <main className="min-h-screen p-4 md:p-6">
-      <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[1600px] overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.08)]">
-        <aside className="w-full shrink-0 border-r border-slate-200 bg-slate-50/70 p-4 md:w-[320px]">
-          <div className="space-y-4">
-            <div>
-              <h1 className="text-xl font-semibold text-slate-900">Inbox</h1>
-              <p className="mt-1 text-sm text-slate-500">Conversas entre clientes e o agente.</p>
+    <main className="min-h-screen p-3 md:p-5">
+      <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-[1720px] overflow-hidden rounded-[36px] border border-[var(--border)] bg-[var(--panel)] shadow-[0_24px_100px_rgba(0,0,0,0.08)] backdrop-blur-xl">
+        <aside className="w-full shrink-0 border-r border-[var(--border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.58),rgba(255,255,255,0.34))] p-4 md:w-[356px] md:p-6">
+          <div className="space-y-6">
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--muted)]">Human Inbox</p>
+              <h1 className="text-[31px] font-semibold tracking-[-0.05em] text-slate-950">Conversas</h1>
+              <p className="max-w-[26ch] text-sm leading-6 text-[var(--muted)]">Uma fila humana mais silenciosa, clara e rapida para operar handoff com contexto.</p>
             </div>
 
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Buscar por nome ou telefone"
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"
+              className="w-full rounded-[22px] border border-[var(--border)] bg-white/88 px-4 py-3.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[var(--accent)] focus:bg-white"
             />
 
             {phoneNumbers.length > 1 ? (
               <select
                 value={selectedPhoneNumberId}
                 onChange={(event) => setSelectedPhoneNumberId(event.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"
+                className="w-full rounded-[22px] border border-[var(--border)] bg-white/88 px-4 py-3.5 text-sm text-slate-900 outline-none focus:border-[var(--accent)] focus:bg-white"
               >
                 <option value="all">Todos os numeros</option>
                 {phoneNumbers.map((phoneNumber) => (
@@ -160,7 +161,7 @@ export function InboxLayout({
               </select>
             ) : null}
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 rounded-[26px] bg-black/[0.03] p-1">
               {[
                 ["all", "Todas"],
                 ["agent", "Agente"],
@@ -171,8 +172,10 @@ export function InboxLayout({
                   key={value}
                   type="button"
                   onClick={() => setFilter(value as FilterMode)}
-                  className={`rounded-2xl px-3 py-2 text-sm ${
-                    filter === value ? "bg-slate-900 text-white" : "bg-white text-slate-600"
+                  className={`rounded-[20px] px-3 py-2.5 text-sm ${
+                    filter === value
+                      ? "bg-slate-950 text-white shadow-[0_10px_24px_rgba(15,23,42,0.18)]"
+                      : "bg-transparent text-slate-500 hover:bg-white/80 hover:text-slate-800"
                   }`}
                 >
                   {label}
@@ -187,7 +190,7 @@ export function InboxLayout({
                   await postJson("/api/sync", selectedPhoneNumberId === "all" ? undefined : { phoneNumberId: selectedPhoneNumberId });
                 })
               }
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+              className="rounded-[22px] border border-[var(--border)] bg-white px-4 py-3 text-sm font-medium text-slate-700 hover:border-slate-300 hover:bg-white"
             >
               Sincronizar
             </button>
@@ -200,7 +203,7 @@ export function InboxLayout({
           </div>
         </aside>
 
-        <section className="flex min-w-0 flex-1 flex-col">
+        <section className="flex min-w-0 flex-1 flex-col bg-[linear-gradient(180deg,rgba(255,255,255,0.36),rgba(255,255,255,0.76))]">
           <ConversationHeader
             conversation={selectedConversation}
             phoneNumbers={phoneNumbers}
@@ -219,7 +222,7 @@ export function InboxLayout({
             }}
           />
 
-          {error ? <div className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm text-rose-700">{error}</div> : null}
+          {error ? <div className="border-b border-rose-100 bg-rose-50/90 px-6 py-3 text-sm text-rose-700">{error}</div> : null}
 
           <MessageThread conversation={selectedConversation} />
 

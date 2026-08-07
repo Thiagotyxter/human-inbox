@@ -1,37 +1,47 @@
 import { NextResponse } from "next/server";
 
+import { requireApiUser } from "@/lib/auth/user";
+import { getMessageById } from "@/lib/conversations/repository";
 import { jsonError } from "@/lib/http";
-import { fetchTyxterMedia, resolveTyxterMessageMediaUrl } from "@/lib/tyxter/messages";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createTyxterMediaDownloadUrl, fetchTyxterMedia } from "@/lib/tyxter/messages";
+import { extractMediaAssetId } from "@/lib/conversations/service";
 
-export async function GET(_: Request, context: { params: Promise<{ messageId: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ messageId: string }> }) {
   try {
+    const { user } = await requireApiUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const { messageId } = await context.params;
-    const mediaUrl = await resolveTyxterMessageMediaUrl(messageId);
+    const admin = createSupabaseAdminClient();
+    const message = await getMessageById(admin, messageId);
 
-    if (!mediaUrl) {
-      return NextResponse.json({ error: "Midia nao encontrada ou expirada." }, { status: 404 });
+    const assetId = message ? message.media_asset_id ?? extractMediaAssetId(message.payload) : null;
+
+    if (!assetId) {
+      return NextResponse.json({ error: "Mensagem sem asset de midia da Tyxter." }, { status: 404 });
     }
 
-    const upstream = await fetchTyxterMedia(mediaUrl);
-
-    if (upstream.status === 302 || upstream.status === 307) {
-      const location = upstream.headers.get("location");
-
-      if (location) {
-        return NextResponse.redirect(location);
-      }
-    }
+    const mediaUrl = await createTyxterMediaDownloadUrl(assetId);
+    const upstream = await fetchTyxterMedia(mediaUrl, request.headers.get("range"));
 
     if (!upstream.ok) {
       return NextResponse.json({ error: "Nao foi possivel obter a midia da Tyxter." }, { status: upstream.status });
     }
 
+    const headers = new Headers({
+      "Content-Type": upstream.headers.get("content-type") ?? message?.media_mime_type ?? "application/octet-stream",
+      "Cache-Control": "private, no-store",
+      "Accept-Ranges": upstream.headers.get("accept-ranges") ?? "bytes",
+    });
+    for (const name of ["content-length", "content-range", "content-disposition"]) {
+      const value = upstream.headers.get(name);
+      if (value) headers.set(name, value);
+    }
+
     return new NextResponse(upstream.body, {
       status: upstream.status,
-      headers: {
-        "Content-Type": upstream.headers.get("content-type") ?? "application/octet-stream",
-        "Cache-Control": "private, no-store",
-      },
+      headers,
     });
   } catch (error) {
     return jsonError(error);
