@@ -193,6 +193,8 @@ Autentique e clique em `Sincronizar`. `POST /api/sync` pagina `GET /v1/messages?
 
 ## 8. Integre o takeover ao agente
 
+> Guia completo: [Conectando seu agente ao Human Inbox](docs/CONNECT_YOUR_AGENT.md). Ele cobre agente local, agente hospedado, tunnels, webhooks e um teste de takeover ponta a ponta.
+
 Takeover muda o modo para `human`, mas não interrompe sozinho um agente hospedado em outro serviço. Esse agente deve consultar:
 
 ```text
